@@ -1,5 +1,5 @@
 name: friendli-provider
 kind: model-provider
 version: 1.0.0
-description: FriendliAI (api.friendli.ai serverless)
+description: Friendli Model APIs provide instant access to a curated set of models, powered by a proprietary inference stack called Friendli Engine for high-performance, cost-efficient inference.
 author: Lee-Si-Yoon
