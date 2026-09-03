@@ -87,27 +87,34 @@ class TestFriendliDiscovery:
 
 
 class TestReasoningDisable:
-    """The bug this plugin exists to fix: disable must never send reasoning_effort=none."""
+    """The bug this plugin exists to fix: disable must never send reasoning_effort=none.
 
-    def test_enabled_false_emits_enable_thinking_false(self):
+    Live-verified (2026-09-03) that chat_template_kwargs.enable_thinking=false
+    returns 200 but doesn't reliably suppress reasoning (GLM-5.3 still leaks a
+    trailing "</think>" marker into the answer) — reasoning_budget=0 is the
+    switch that actually works on every catalog model, so that's what the
+    disable path emits.
+    """
+
+    def test_enabled_false_emits_reasoning_budget_zero(self):
         _seed(CATALOG)
         p = _profile()
         eb, tl = p.build_api_kwargs_extras(
             reasoning_config={"enabled": False}, model=EFFORT_MODEL
         )
-        assert eb == {"chat_template_kwargs": {"enable_thinking": False}}
-        assert tl == {}
+        assert tl == {"reasoning_budget": 0}
+        assert eb == {}
         assert "reasoning_effort" not in tl
 
-    def test_effort_disable_words_emit_enable_thinking_false(self):
+    def test_effort_disable_words_emit_reasoning_budget_zero(self):
         _seed(CATALOG)
         p = _profile()
         for word in ("none", "false", "disabled"):
             eb, tl = p.build_api_kwargs_extras(
                 reasoning_config={"enabled": True, "effort": word}, model=EFFORT_MODEL
             )
-            assert eb == {"chat_template_kwargs": {"enable_thinking": False}}, word
-            assert tl == {}, word
+            assert tl == {"reasoning_budget": 0}, word
+            assert eb == {}, word
 
     def test_disable_works_before_catalog_is_warm(self):
         # Cold cache (no /models fetch has happened yet) must not block the
@@ -118,8 +125,8 @@ class TestReasoningDisable:
         eb, tl = p.build_api_kwargs_extras(
             reasoning_config={"enabled": False}, model="some-unfetched-model"
         )
-        assert eb == {"chat_template_kwargs": {"enable_thinking": False}}
-        assert tl == {}
+        assert tl == {"reasoning_budget": 0}
+        assert eb == {}
 
     def test_non_reasoning_model_disable_emits_nothing(self):
         _seed(CATALOG)

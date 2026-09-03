@@ -10,19 +10,40 @@ Hermes' universal "turn thinking off" signal is a request carrying
 none``, ``reasoning_effort: none``/``false`` in config.yaml). The ``custom``
 profile translates that into a top-level ``reasoning_effort: "none"`` field
 (see ``plugins/model-providers/custom/__init__.py``) — the shape GLM-5.2/ARK
-and vLLM-style endpoints expect. Friendli's API validates ``reasoning_effort``
-against a per-model enum that does **not** include ``"none"`` and rejects the
-request with HTTP 422. The actual way to disable thinking on Friendli is
-``extra_body.chat_template_kwargs.enable_thinking: false`` — the same
-``chat_template_kwargs`` toggle vLLM's reasoning-parser integration exposes,
-which Friendli's serverless endpoint fronts directly. This mirrors exactly
-what :mod:`plugins.model_providers.zai` already does for Z.AI's
-``extra_body.thinking`` toggle, and what ``dsh-llm-friendli``'s
-``resolveReasoning()`` (``src/serialize.ts``) already does for the same API:
+and vLLM-style endpoints expect.
 
-    off  -> extra_body.chat_template_kwargs.enable_thinking = false
-    on   -> extra_body.chat_template_kwargs.enable_thinking = true
+Three candidate disable mechanisms were checked live against all 8 models on
+the serverless catalog before picking one:
+
+- top-level ``reasoning_effort: "none"`` — HTTP 422 (``invalid JSON payload:
+  unknown enum value: 'none'``) on every model except GLM-5.3-Flash. Friendli's
+  chat-completions API reference documents the ``reasoning_effort`` enum as
+  ``minimal|low|medium|high|xhigh|max``; ``"none"`` was never a valid value,
+  so the 422 is Friendli enforcing its own spec, not a bug on Friendli's side.
+- ``extra_body.chat_template_kwargs.enable_thinking: false`` — returns 200 on
+  every model, but does not reliably suppress reasoning: GLM-5.3 still emits
+  its ``<think>...</think>`` marker in the response content (e.g.
+  ``"12 * 13 = 156.</think>156"``). A 200 that leaks reasoning tokens into
+  the answer is worse than a loud failure, so this is not used as the
+  disable switch despite looking like the vLLM-idiomatic choice.
+- top-level ``reasoning_budget: 0`` (documented as an integer field capping
+  internal reasoning-token usage) — 200 on every model, reasoning genuinely
+  off, immediate answer. This is Friendli's actual "reasoning off" switch and
+  what this plugin sends.
+
+So the mapping this plugin implements is:
+
+    off  -> top-level reasoning_budget = 0
+    on, toggle-only model  -> extra_body.chat_template_kwargs.enable_thinking = true
     "<level>" -> top-level reasoning_effort = "<level>" (verbatim on that wire)
+
+The "on" side still uses ``chat_template_kwargs.enable_thinking`` (the same
+toggle :mod:`plugins.model_providers.zai` and ``dsh-llm-friendli``'s
+``resolveReasoning()`` in ``src/serialize.ts`` use) because turning reasoning
+*on* was not observed to have the leakage problem above — only the *off*
+path was. Only ``reasoning_effort`` disable spellings (never a hardcoded
+``"none"`` string on the wire) and the ``reasoning_budget`` field are new
+relative to those two references.
 
 Unlike the Z.AI profile, this plugin does **not** hardcode a per-model effort
 vocabulary (no ``GLM52_EFFORTS``-style constant). Friendli's own
@@ -40,8 +61,10 @@ fields). ``reasoning_options`` entries describe *how* a reasoning model is
 controlled: an ``"effort"`` entry publishes a discrete named-level enum (the
 values ``reasoning_effort`` accepts on the wire for that model); a
 ``"toggle"`` entry means the model has a plain on/off switch
-(``enable_thinking``) with no graded levels; ``"budget_tokens"`` is a token
-budget knob this plugin does not touch. A model can publish more than one —
+(``enable_thinking``) with no graded levels; ``"budget_tokens"`` publishes the
+range for the ``reasoning_budget`` integer field — this plugin only ever
+sends ``0`` on that field (the verified disable value) and never reads its
+``min``/``max`` for anything else. A model can publish more than one —
 GLM-5.2 exposes both ``toggle`` and ``effort`` (its 2-level ``high``/``max``
 enum), DeepSeek-V3.2 exposes only ``toggle``. This plugin fetches that
 catalog lazily (never blocking a request on network I/O — see
@@ -78,12 +101,6 @@ FRIENDLI_BASE_URL = "https://api.friendli.ai/serverless/v1"
 FALLBACK_MODELS: tuple[str, ...] = (
     "zai-org/GLM-5.3",
     "zai-org/GLM-5.3-Flash",
-    "zai-org/GLM-5.2",
-    "zai-org/GLM-5.1",
-    "deepseek-ai/DeepSeek-V3.2",
-    "MiniMaxAI/MiniMax-M2.5",
-    "LGAI-EXAONE/K-EXAONE-2.0-750B-A37B",
-    "google/gemma-4-31B-it",
 )
 
 # Disable spellings accepted from Hermes' reasoning config, on top of the
@@ -322,7 +339,7 @@ def _catalog_entry(model: Optional[str]) -> Optional[dict[str, Any]]:
 
 
 class FriendliProfile(ProviderProfile):
-    """FriendliAI serverless — chat_template_kwargs.enable_thinking + catalog-driven reasoning_effort."""
+    """FriendliAI serverless — reasoning_budget=0 disable + catalog-driven reasoning_effort."""
 
     def fetch_models(
         self,
@@ -395,11 +412,15 @@ class FriendliProfile(ProviderProfile):
         if enabled is False or effort in _DISABLE_EFFORT_WORDS:
             # The bug this plugin exists to fix: Friendli 422s on a top-level
             # reasoning_effort value outside its per-model enum, and "none" is
-            # never in that enum. The actual disable switch is
-            # chat_template_kwargs.enable_thinking=false. Emitted unconditionally
-            # here (not gated on a warm catalog) so "turn thinking off" works
-            # on the very first request, before any /models fetch has run.
-            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
+            # never in that enum. Live-verified (2026-09-03, all 8 catalog
+            # models): chat_template_kwargs.enable_thinking=false returns 200
+            # but doesn't reliably suppress reasoning (GLM-5.3 still leaks a
+            # trailing "</think>" marker into the answer). The disable switch
+            # that actually works everywhere is the top-level integer field
+            # reasoning_budget=0. Emitted unconditionally here (not gated on a
+            # warm catalog) so "turn thinking off" works on the very first
+            # request, before any /models fetch has run.
+            top_level["reasoning_budget"] = 0
             return extra_body, top_level
 
         effort_values = entry["effort"] if entry else ()
@@ -445,7 +466,7 @@ friendli = FriendliProfile(
     aliases=("friendliai",),
     env_vars=("FRIENDLI_API_KEY", "FRIENDLI_TOKEN"),
     display_name="FriendliAI",
-    description="FriendliAI — serverless endpoint (GLM, DeepSeek, MiniMax, EXAONE, Gemma)",
+    description="Friendli Model APIs provide instant access to a curated set of models, powered by a proprietary inference stack called Friendli Engine for high-performance, cost-efficient inference.",
     signup_url="https://friendli.ai/",
     fallback_models=FALLBACK_MODELS,
     base_url=FRIENDLI_BASE_URL,
