@@ -10,7 +10,7 @@ reasoning.
 ## Installation
 
 ```bash
-hermes plugins install Lee-Si-Yoon/hermes-friendli-provider
+hermes plugins install friendliai/hermes-friendli-provider
 ```
 
 Then add your API key to `~/.hermes/.env`:
