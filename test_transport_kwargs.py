@@ -97,7 +97,7 @@ def _create_capturing_client():
         )
 
     client = openai.OpenAI(
-        api_key="dummy-not-sent-anywhere",
+        api_key="mock",  # never leaves this process: MockTransport below
         base_url=FRIENDLI_BASE_URL,
         http_client=httpx.Client(transport=httpx.MockTransport(handler)),
     )
