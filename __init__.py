@@ -34,6 +34,7 @@ the serverless catalog before picking one:
 So the mapping this plugin implements is:
 
     off  -> extra_body.reasoning_budget = 0
+            extra_body.chat_template_kwargs.enable_thinking = false
 
 ``extra_body`` keys are merged into the JSON request body's top level by the
 OpenAI SDK, so on the wire this is still a top-level integer field — but it
@@ -444,6 +445,7 @@ class FriendliProfile(ProviderProfile):
             # body's top level, so Friendli still receives
             # {"reasoning_budget": 0} exactly as before.
             extra_body["reasoning_budget"] = 0
+            extra_body["chat_template_kwargs"] = {"enable_thinking": False}
             return extra_body, top_level
 
         effort_values = entry["effort"] if entry else ()

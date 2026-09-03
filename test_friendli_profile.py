@@ -111,7 +111,10 @@ class TestReasoningDisable:
             reasoning_config={"enabled": False}, model=EFFORT_MODEL
         )
         assert tl == {}
-        assert eb == {"reasoning_budget": 0}
+        assert eb == {
+            "reasoning_budget": 0,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
         assert "reasoning_effort" not in eb
 
     def test_effort_disable_words_emit_reasoning_budget_zero(self):
@@ -122,7 +125,10 @@ class TestReasoningDisable:
                 reasoning_config={"enabled": True, "effort": word}, model=EFFORT_MODEL
             )
             assert tl == {}, word
-            assert eb == {"reasoning_budget": 0}, word
+            assert eb == {
+                "reasoning_budget": 0,
+                "chat_template_kwargs": {"enable_thinking": False},
+            }, word
 
     def test_disable_works_before_catalog_is_warm(self):
         # Cold cache (no /models fetch has happened yet) must not block the
@@ -134,7 +140,10 @@ class TestReasoningDisable:
             reasoning_config={"enabled": False}, model="some-unfetched-model"
         )
         assert tl == {}
-        assert eb == {"reasoning_budget": 0}
+        assert eb == {
+            "reasoning_budget": 0,
+            "chat_template_kwargs": {"enable_thinking": False},
+        }
 
     def test_disable_never_returns_an_sdk_top_level_kwarg(self):
         # Regression guard for the TypeError: whatever the disable path

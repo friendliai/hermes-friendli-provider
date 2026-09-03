@@ -137,6 +137,7 @@ class TestDisableSurvivesTheSdk:
         client.chat.completions.create(**kwargs)  # TypeError pre-fix
         body = captured["body"]
         assert body.get("reasoning_budget") == 0
+        assert body.get("chat_template_kwargs") == {"enable_thinking": False}
         assert "reasoning_effort" not in body
         assert body.get("extra_body") is None
 
@@ -150,6 +151,7 @@ class TestDisableSurvivesTheSdk:
             client, captured = _create_capturing_client()
             client.chat.completions.create(**kwargs)
             assert captured["body"].get("reasoning_budget") == 0, word
+            assert captured["body"].get("chat_template_kwargs") == {"enable_thinking": False}, word
             assert "reasoning_effort" not in captured["body"], word
 
     def test_positive_control_old_mapping_still_crashes(self):

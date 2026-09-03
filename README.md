@@ -33,7 +33,7 @@ model:
 ## Why not just point `custom` at Friendli?
 
 - Registering Friendli as a plain `custom`/OpenAI-compatible endpoint in `config.yaml` works for chat, but turning reasoning off gets you an **HTTP 422** — `custom` sends `reasoning_effort: "none"`, which isn't a value Friendli accepts.
-- This plugin sends Friendli's actual disable switch (`reasoning_budget: 0`) instead, so `/reasoning none` and the desktop toggle work without editing your config.
+- This plugin sends both Friendli disable controls — `reasoning_budget: 0` and `chat_template_kwargs.enable_thinking: false` — so `/reasoning none` and the desktop toggle work without editing your config.
 - Effort levels (`low`/`high`/`max`, ...) are validated per model from Friendli's live catalog, not a vocabulary you'd otherwise have to guess or hardcode yourself.
 - `hermes model` lists Friendli's current models and picks a fast aux model automatically — a `custom` entry only ever shows what you typed in.
 
