@@ -94,6 +94,14 @@ class TestReasoningDisable:
     trailing "</think>" marker into the answer) — reasoning_budget=0 is the
     switch that actually works on every catalog model, so that's what the
     disable path emits.
+
+    On the wire that field is top-level JSON, but it is returned in the
+    extra_body slot, never as a top-level kwarg: the transport merges
+    top_level kwargs straight into chat.completions.create(**kwargs) and the
+    OpenAI SDK signature has no reasoning_budget parameter (only
+    reasoning_effort), so a top-level kwarg crashes every reasoning-off
+    request client-side with
+    `Completions.create() got an unexpected keyword argument 'reasoning_budget'`.
     """
 
     def test_enabled_false_emits_reasoning_budget_zero(self):
@@ -102,9 +110,9 @@ class TestReasoningDisable:
         eb, tl = p.build_api_kwargs_extras(
             reasoning_config={"enabled": False}, model=EFFORT_MODEL
         )
-        assert tl == {"reasoning_budget": 0}
-        assert eb == {}
-        assert "reasoning_effort" not in tl
+        assert tl == {}
+        assert eb == {"reasoning_budget": 0}
+        assert "reasoning_effort" not in eb
 
     def test_effort_disable_words_emit_reasoning_budget_zero(self):
         _seed(CATALOG)
@@ -113,8 +121,8 @@ class TestReasoningDisable:
             eb, tl = p.build_api_kwargs_extras(
                 reasoning_config={"enabled": True, "effort": word}, model=EFFORT_MODEL
             )
-            assert tl == {"reasoning_budget": 0}, word
-            assert eb == {}, word
+            assert tl == {}, word
+            assert eb == {"reasoning_budget": 0}, word
 
     def test_disable_works_before_catalog_is_warm(self):
         # Cold cache (no /models fetch has happened yet) must not block the
@@ -125,8 +133,29 @@ class TestReasoningDisable:
         eb, tl = p.build_api_kwargs_extras(
             reasoning_config={"enabled": False}, model="some-unfetched-model"
         )
-        assert tl == {"reasoning_budget": 0}
-        assert eb == {}
+        assert tl == {}
+        assert eb == {"reasoning_budget": 0}
+
+    def test_disable_never_returns_an_sdk_top_level_kwarg(self):
+        # Regression guard for the TypeError: whatever the disable path
+        # returns, any named kwarg the transport would merge into
+        # chat.completions.create(**kwargs) must be an SDK-accepted parameter
+        # name. reasoning_budget is not (reasoning_effort is).
+        import inspect
+
+        from openai.resources.chat import completions as _oc
+
+        _seed(CATALOG)
+        p = _profile()
+        sdk_params = set(
+            inspect.signature(_oc.Completions.create).parameters
+        ) - {"self"}
+        for model in CATALOG:
+            eb, tl = p.build_api_kwargs_extras(
+                reasoning_config={"enabled": False}, model=model
+            )
+            unknown = set(tl) - sdk_params
+            assert not unknown, f"{model}: top-level kwargs {unknown} are not OpenAI SDK parameters"
 
     def test_non_reasoning_model_disable_emits_nothing(self):
         _seed(CATALOG)

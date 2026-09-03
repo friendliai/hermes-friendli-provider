@@ -33,7 +33,20 @@ the serverless catalog before picking one:
 
 So the mapping this plugin implements is:
 
-    off  -> top-level reasoning_budget = 0
+    off  -> extra_body.reasoning_budget = 0
+
+``extra_body`` keys are merged into the JSON request body's top level by the
+OpenAI SDK, so on the wire this is still a top-level integer field — but it
+travels as an *unnamed* body key, not a named kwarg of
+``chat.completions.create()``. That distinction matters: the SDK validates
+kwargs against its own signature (which has ``reasoning_effort`` but no
+``reasoning_budget``) and raises
+``Completions.create() got an unexpected keyword argument 'reasoning_budget'``
+client-side, before a single byte hits Friendli — the transport
+(``agent/transports/chat_completions.py:_build_kwargs_from_profile``) merges
+a profile's top-level extras directly into the ``create(**kwargs)`` call, so
+returning ``reasoning_budget`` as a top-level kwarg made *every* reasoning-off
+request crash. It must be returned in the ``extra_body`` slot.
     on, toggle-only model  -> extra_body.chat_template_kwargs.enable_thinking = true
     "<level>" -> top-level reasoning_effort = "<level>" (verbatim on that wire)
 
@@ -339,7 +352,7 @@ def _catalog_entry(model: Optional[str]) -> Optional[dict[str, Any]]:
 
 
 class FriendliProfile(ProviderProfile):
-    """FriendliAI serverless — reasoning_budget=0 disable + catalog-driven reasoning_effort."""
+    """FriendliAI serverless — extra_body reasoning_budget=0 disable + catalog-driven reasoning_effort."""
 
     def fetch_models(
         self,
@@ -416,11 +429,21 @@ class FriendliProfile(ProviderProfile):
             # models): chat_template_kwargs.enable_thinking=false returns 200
             # but doesn't reliably suppress reasoning (GLM-5.3 still leaks a
             # trailing "</think>" marker into the answer). The disable switch
-            # that actually works everywhere is the top-level integer field
-            # reasoning_budget=0. Emitted unconditionally here (not gated on a
-            # warm catalog) so "turn thinking off" works on the very first
-            # request, before any /models fetch has run.
-            top_level["reasoning_budget"] = 0
+            # that actually works everywhere is the wire's top-level integer
+            # field reasoning_budget=0. Emitted unconditionally here (not
+            # gated on a warm catalog) so "turn thinking off" works on the
+            # very first request, before any /models fetch has run.
+            #
+            # Sent via extra_body, NOT as a top-level kwarg: the OpenAI SDK
+            # merge in the transport puts a profile's top_level dict straight
+            # into chat.completions.create(**kwargs), whose signature has no
+            # reasoning_budget parameter -> TypeError before the request is
+            # even built (the reported
+            # `Completions.create() got an unexpected keyword argument
+            # 'reasoning_budget'`). extra_body keys serialize into the JSON
+            # body's top level, so Friendli still receives
+            # {"reasoning_budget": 0} exactly as before.
+            extra_body["reasoning_budget"] = 0
             return extra_body, top_level
 
         effort_values = entry["effort"] if entry else ()
