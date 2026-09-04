@@ -143,7 +143,7 @@ _DISK_TTL_SECONDS = 24 * 60 * 60
 
 
 def _resolve_api_key() -> str:
-    """Resolve FRIENDLI_API_KEY / FRIENDLI_TOKEN, preferring dotenv."""
+    """Resolve FRIENDLIAI_API_KEY, preferring dotenv."""
     resolvers = []
     try:
         from hermes_cli.config import get_env_value_prefer_dotenv
@@ -153,7 +153,7 @@ def _resolve_api_key() -> str:
         pass
     resolvers.append(lambda var: os.environ.get(var, ""))
     for resolve in resolvers:
-        for var in ("FRIENDLI_API_KEY", "FRIENDLI_TOKEN"):
+        for var in ("FRIENDLIAI_API_KEY",):
             try:
                 value = str(resolve(var) or "").strip()
             except Exception:
@@ -489,7 +489,7 @@ class FriendliProfile(ProviderProfile):
 friendli = FriendliProfile(
     name="friendli",
     aliases=("friendliai",),
-    env_vars=("FRIENDLI_API_KEY", "FRIENDLI_TOKEN"),
+    env_vars=("FRIENDLIAI_API_KEY",),
     display_name="FriendliAI",
     description="Friendli Model APIs provide instant access to a curated set of models, powered by a proprietary inference stack called Friendli Engine for high-performance, cost-efficient inference.",
     signup_url="https://friendli.ai/",

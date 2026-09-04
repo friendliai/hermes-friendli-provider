@@ -75,7 +75,7 @@ class TestFriendliDiscovery:
         assert p.name == "friendli"
         assert p.display_name == "FriendliAI"
         assert p.signup_url
-        assert p.env_vars == ("FRIENDLI_API_KEY", "FRIENDLI_TOKEN")
+        assert p.env_vars == ("FRIENDLIAI_API_KEY",)
         assert p.base_url == "https://api.friendli.ai/serverless/v1"
         assert p.aliases == ("friendliai",)
         assert p.default_aux_model == "zai-org/GLM-5.3-Flash"

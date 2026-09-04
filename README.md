@@ -10,16 +10,15 @@ reasoning.
 ## Installation
 
 ```bash
-hermes plugins install friendliai/hermes-friendli-provider
+hermes plugins install friendliai/hermes-friendliai-provider
 ```
 
 Then add your API key to `~/.hermes/.env`:
 
 ```
-FRIENDLI_API_KEY=your_key_here
+FRIENDLIAI_API_KEY=your_key_here
 ```
 
-(`FRIENDLI_TOKEN` is also checked, in case that's what you already have set.)
 
 Pick the provider with `hermes model` (FriendliAI → `zai-org/GLM-5.3` etc.)
 or set it in `config.yaml`:
