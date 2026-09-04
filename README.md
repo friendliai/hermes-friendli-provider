@@ -1,4 +1,4 @@
-# Hermes Friendli Provider
+# Hermes FriendliAI Provider
 
 FriendliAI model provider plugin for [Hermes Agent](https://github.com/NousResearch/hermes-agent).
 
